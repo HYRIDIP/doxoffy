@@ -1,117 +1,41 @@
-import { useState, useEffect, useRef } from 'react'
+import { initDatabase, getDB } from '../../../lib/database'
+import { getCurrentUser } from '../../../lib/auth'
 
-export default function Chat() {
-  const [isOpen, setIsOpen] = useState(false)
-  const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState([])
-  const [currentUser, setCurrentUser] = useState(null)
-  const [isConnected, setIsConnected] = useState(false)
-  const ws = useRef(null)
-
-  useEffect(() => {
-    // Получаем текущего пользователя
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => {
-        if (data.user) {
-          setCurrentUser(data.user)
-          connectWebSocket()
-        }
-      })
-      .catch(console.error)
-
-    return () => {
-      if (ws.current) {
-        ws.current.close()
-      }
-    }
-  }, [])
-
-  const connectWebSocket = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}`
-    
-    ws.current = new WebSocket(wsUrl)
-    
-    ws.current.onopen = () => {
-      setIsConnected(true)
-      console.log('Connected to chat')
-    }
-
-    ws.current.onclose = () => {
-      setIsConnected(false)
-      console.log('Disconnected from chat')
-    }
-
-    ws.current.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      
-      if (data.type === 'message_history') {
-        setMessages(data.messages)
-      } else if (data.type === 'new_message') {
-        setMessages(prev => [...prev, data.message])
-      }
-    }
-
-    ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error)
-    }
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const sendMessage = (e) => {
-    e.preventDefault()
-    if (!message.trim() || !currentUser || !isConnected) return
-
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({
-        type: 'chat_message',
-        content: message
-      }))
-      setMessage('')
-    }
+  const user = getCurrentUser(req)
+  if (!user) {
+    return res.status(401).json({ error: 'Not authenticated' })
   }
 
-  return (
-    <div className="chat-widget">
-      <div className="chat-header" onClick={() => setIsOpen(!isOpen)}>
-        Global Chat {isOpen ? '▲' : '▼'}
-        <span style={{
-          width: '8px',
-          height: '8px',
-          borderRadius: '50%',
-          background: isConnected ? '#3fb950' : '#da3633',
-          marginLeft: '8px',
-          display: 'inline-block'
-        }}></span>
-      </div>
-      
-      {isOpen && (
-        <>
-          <div className="chat-messages">
-            {messages.map(msg => (
-              <div key={msg.id} style={{ marginBottom: '8px' }}>
-                <span className={msg.role === 'admin' ? 'admin-badge' : msg.role === 'moderator' ? 'moderator-badge' : ''}>
-                  {msg.username}:
-                </span> {msg.content}
-                <span style={{ fontSize: '10px', color: '#8b949e', marginLeft: '5px' }}>
-                  {new Date(msg.created_at).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
-          </div>
-          
-          <form onSubmit={sendMessage} className="chat-input">
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder={currentUser && isConnected ? "Type a message..." : "Connecting..."}
-              disabled={!currentUser || !isConnected}
-              maxLength={200}
-            />
-          </form>
-        </>
-      )}
-    </div>
-  )
+  const { content } = req.body
+
+  if (!content || content.trim().length === 0) {
+    return res.status(400).json({ error: 'Message content required' })
+  }
+
+  if (content.length > 200) {
+    return res.status(400).json({ error: 'Message too long' })
+  }
+
+  try {
+    await initDatabase()
+    const db = getDB()
+    
+    const stmt = db.prepare('INSERT INTO messages (user_id, content) VALUES (?, ?)')
+    stmt.bind([user.id, content.trim()])
+    stmt.step()
+    stmt.free()
+
+    res.status(201).json({
+      message: 'Message sent',
+      success: true
+    })
+  } catch (error) {
+    console.error('Error sending message:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
 }
