@@ -1,4 +1,4 @@
-import { initDatabase, getDB } from '../lib/database'
+import { initDatabase, getDB } from '../lib/database.js'
 import bcrypt from 'bcryptjs'
 
 class User {
@@ -7,74 +7,46 @@ class User {
     const db = getDB()
     
     const hashedPassword = bcrypt.hashSync(password, 10)
-    const stmt = db.prepare('INSERT INTO users (username, password) VALUES (?, ?)')
-    stmt.bind([username, hashedPassword])
-    const result = stmt.step()
-    stmt.free()
+    const result = db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run([username, hashedPassword])
     
-    return { lastInsertRowid: db.exec("SELECT last_insert_rowid()")[0].values[0][0] }
+    return { lastInsertRowid: result.lastInsertRowid }
   }
 
   static async findByUsername(username) {
     await initDatabase()
     const db = getDB()
     
-    const stmt = db.prepare('SELECT * FROM users WHERE username = ?')
-    stmt.bind([username])
-    
-    if (stmt.step()) {
-      const row = stmt.getAsObject()
-      stmt.free()
-      return row
-    }
-    stmt.free()
-    return null
+    return db.prepare('SELECT * FROM users WHERE username = ?').bind([username]).run()
   }
 
   static async findById(id) {
     await initDatabase()
     const db = getDB()
     
-    const stmt = db.prepare('SELECT * FROM users WHERE id = ?')
-    stmt.bind([id])
-    
-    if (stmt.step()) {
-      const row = stmt.getAsObject()
-      stmt.free()
-      return row
-    }
-    stmt.free()
-    return null
+    return db.prepare('SELECT * FROM users WHERE id = ?').bind([id]).run()
   }
 
   static async updateRole(userId, role) {
     await initDatabase()
     const db = getDB()
     
-    const stmt = db.prepare('UPDATE users SET role = ? WHERE id = ?')
-    stmt.bind([role, userId])
-    stmt.step()
-    stmt.free()
+    // In-memory implementation
+    const user = db.users.find(u => u.id === userId)
+    if (user) user.role = role
   }
 
   static async delete(userId) {
     await initDatabase()
     const db = getDB()
     
-    const stmt = db.prepare('DELETE FROM users WHERE id = ?')
-    stmt.bind([userId])
-    stmt.step()
-    stmt.free()
+    db.users = db.users.filter(u => u.id !== userId)
   }
 
   static async getOnlineCount() {
     await initDatabase()
     const db = getDB()
     
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM users WHERE is_online = 1')
-    stmt.step()
-    const result = stmt.getAsObject()
-    stmt.free()
+    const result = db.prepare('SELECT COUNT(*) as count FROM users WHERE is_online = 1').run()
     return result.count
   }
 
@@ -82,10 +54,7 @@ class User {
     await initDatabase()
     const db = getDB()
     
-    const stmt = db.prepare('UPDATE users SET is_online = ? WHERE id = ?')
-    stmt.bind([isOnline ? 1 : 0, userId])
-    stmt.step()
-    stmt.free()
+    db.prepare('UPDATE users SET is_online = ? WHERE id = ?').run([isOnline ? 1 : 0, userId])
   }
 }
 
