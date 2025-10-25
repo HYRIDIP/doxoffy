@@ -2,7 +2,7 @@ import User from '../../../models/User'
 import { verifyPassword } from '../../../lib/auth'
 import { createSession } from '../../../lib/session'
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -21,7 +21,7 @@ export default function handler(req, res) {
       id: 1
     })
     
-    res.setHeader('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict`)
+    res.setHeader('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`)
     return res.status(200).json({
       message: 'Login successful',
       user: {
@@ -31,33 +31,36 @@ export default function handler(req, res) {
     })
   }
 
-  const user = User.findByUsername(username)
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid credentials' })
-  }
+  try {
+    const user = await User.findByUsername(username)
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
 
-  if (!verifyPassword(password, user.password)) {
-    return res.status(401).json({ error: 'Invalid credentials' })
-  }
+    if (!verifyPassword(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
 
-  // Обновляем статус онлайн
-  const db = require('../../../lib/database')
-  const stmt = db.prepare('UPDATE users SET is_online = TRUE WHERE id = ?')
-  stmt.run(user.id)
+    // Обновляем статус онлайн
+    await User.updateOnlineStatus(user.id, true)
 
-  const sessionId = createSession({
-    id: user.id,
-    username: user.username,
-    role: user.role
-  })
-
-  res.setHeader('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict`)
-  res.status(200).json({
-    message: 'Login successful',
-    user: {
+    const sessionId = createSession({
       id: user.id,
       username: user.username,
       role: user.role
-    }
-  })
+    })
+
+    res.setHeader('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`)
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }
+    })
+  } catch (error) {
+    console.error('Login error:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
 }
