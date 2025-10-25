@@ -79,4 +79,15 @@ class User {
   }
 }
 
+static async updateOnlineStatus(userId, isOnline) {
+  await initDatabase();
+  const db = getDB();
+  
+  const stmt = db.prepare('UPDATE users SET is_online = ? WHERE id = ?');
+  stmt.bind([isOnline ? 1 : 0, userId]);
+  stmt.step();
+  stmt.free();
+}
+
 export default User;
+
