@@ -1,5 +1,5 @@
-import { deleteSession } from '../../../lib/session'
-import User from '../../../models/User'
+import { deleteSession, getSession } from '../../../lib/session.js'
+import User from '../../../models/User.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
