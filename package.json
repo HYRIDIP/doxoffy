@@ -10,8 +10,8 @@
     "next": "14.0.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "better-sqlite3": "^8.0.0",
+    "sql.js": "^1.8.0",
     "bcryptjs": "^2.4.3",
-    "next-auth": "^4.0.0"
+    "ws": "^8.0.0"
   }
 }
